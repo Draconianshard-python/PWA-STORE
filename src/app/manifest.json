@@ -1,0 +1,51 @@
+{
+  "name": "PWA Store",
+  "short_name": "PWA Store",
+  "description": "Discover and install Progressive Web Apps (PWAs)",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007AFF",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "orientation": "portrait",
+  "categories": ["utilities", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Search Apps",
+      "url": "/search",
+      "description": "Search for PWAs",
+      "icons": [
+        {
+          "src": "/icons/search-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "url": "/categories",
+      "description": "Browse app categories",
+      "icons": [
+        {
+          "src": "/icons/categories-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}
