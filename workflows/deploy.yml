@@ -1,0 +1,136 @@
+name: Deploy PWA Store
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Allow manual triggering
+  workflow_dispatch:
+
+# Cancel any in-progress job or run
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      NODE_ENV: production
+      
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # For better versioning
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+            ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-
+          
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+        
+      - name: Lint
+        run: npm run lint
+        
+      - name: Type check
+        run: npm run type-check
+        
+      - name: Run tests
+        run: npm test
+        
+      - name: Build project
+        run: |
+          npm run build
+          touch out/.nojekyll # Prevents GitHub Pages from ignoring files that begin with an underscore
+        
+      - name: Optimize images
+        uses: calibreapp/image-actions@main
+        with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          compressOnly: true
+          
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: out
+          clean: true
+          
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          draft: false
+          prerelease: false
+          
+      - name: Report Status
+        if: always()
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          channel-id: 'deployments'
+          slack-message: |
+            Deployment Status: ${{ job.status }}
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Commit: ${{ github.sha }}
+            Workflow: ${{ github.workflow }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  lighthouse:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Run Lighthouse Check
+        uses: treosh/lighthouse-ci-action@v9
+        with:
+          urls: |
+            https://draconianshard-python.github.io/PWA-STORE
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          configPath: './.github/workflows/lighthouse-config.json'
+          
+      - name: Save Lighthouse results
+        uses: actions/upload-artifact@v3
+        with:
+          name: lighthouse-results
+          path: '.lighthouseci'
+
+  security:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Run Security Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          
+      - name: Upload Scan Results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
