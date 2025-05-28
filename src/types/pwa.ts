@@ -1,67 +1,34 @@
-import { PWADetails, PWAManifest } from '@/types/pwa'
+import { NextResponse } from 'next/server'
+import { StorageManager } from '@/lib/storage'
 
-export class StorageManager {
-  private static instance: StorageManager
-  private cache: Map<string, any>
-
-  private constructor() {
-    this.cache = new Map()
-  }
-
-  static getInstance(): StorageManager {
-    if (!StorageManager.instance) {
-      StorageManager.instance = new StorageManager()
-    }
-    return StorageManager.instance
-  }
-
-  async getPWAs(): Promise<PWADetails[]> {
-    if (this.cache.has('pwas')) {
-      return this.cache.get('pwas')
-    }
-
-    const response = await fetch('/api/data/pwas.json')
-    const pwas = await response.json()
-    this.cache.set('pwas', pwas)
-    return pwas
-  }
-
-  async savePWA(pwa: PWAManifest): Promise<PWADetails> {
-    // Upload assets to Cloudinary
-    const assets = await this.uploadAssets(pwa)
+export async function POST(request: Request) {
+  try {
+    const { url } = await request.json()
     
-    // Create PWA details
-    const pwaDetails: PWADetails = {
-      ...pwa,
-      id: crypto.randomUUID(),
-      uploadDate: new Date(),
-      lastUpdated: new Date(),
-      rating: 0,
-      reviews: [],
-      downloads: 0,
-      status: 'active',
-      assets
+    // Fetch manifest
+    const manifestResponse = await fetch(`${url}/manifest.json`)
+    const manifest = await manifestResponse.json()
+    
+    // Check for service worker
+    const swResponse = await fetch(`${url}/service-worker.js`)
+    const hasSW = swResponse.ok
+    
+    if (!manifest || !hasSW) {
+      return NextResponse.json(
+        { error: 'Not a valid PWA' },
+        { status: 400 }
+      )
     }
-
-    // Update local cache
-    const pwas = await this.getPWAs()
-    pwas.push(pwaDetails)
-    this.cache.set('pwas', pwas)
-
-    // Sync with serverless backend
-    await this.syncData()
-
-    return pwaDetails
-  }
-
-  private async uploadAssets(pwa: PWAManifest) {
-    // Implementation for Cloudinary upload
-    // This will handle icons and other assets
-    return []
-  }
-
-  private async syncData() {
-    // Sync with serverless backend
-    // This will ensure data persistence
+    
+    // Save PWA
+    const storage = StorageManager.getInstance()
+    const pwa = await storage.savePWA(manifest)
+    
+    return NextResponse.json({ pwa })
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to scan PWA' },
+      { status: 500 }
+    )
   }
 }
